@@ -58,6 +58,74 @@ The NOVA Python backend also contains workspace APIs for organizations and membe
 Those API capabilities are separate from the Telegram bot menus
 An API route in the source does not by itself prove that its web screen is complete, connected or validated in production
 
+## Backend technologies and techniques
+
+This inventory describes patterns found in the audited live Python source and its deployment configuration
+The source review counted 117 HTTP routes across the API
+It records implementation evidence and does not claim that every route has a finished or production-validated screen
+
+### Application architecture
+
+- Python 3.12 with FastAPI and Starlette for an asynchronous ASGI application served by Uvicorn
+- Versioned REST routes with Pydantic request and response schemas, validation and consistent exception handling
+- Telegram bot and channel integrations implemented with Telethon
+- Modular router, service and repository layers with dependency-injected database sessions
+- A modular backend process with separate Telegram bot, database, Redis and migration services in the Python deployment configuration
+- Explicit content and publishing state machines with approval gates, tenant ownership checks and role-based permissions
+- The Persian web workspace is served from the backend on the same site as its API
+
+### Data, transactions and jobs
+
+- PostgreSQL 16 for production data with SQLAlchemy 2 asynchronous sessions and the asyncpg driver
+- Alembic schema migrations run as a separate deployment step
+- SQLite support for isolated development and tests
+- Request-scoped database transactions that commit after success and roll back on exceptions, with savepoints for selected conflict handling
+- Redis 7 for shared rate limits, cached values, login challenges, sessions, distributed locks and cross-process job queues
+- A Redis-backed queue pattern with claims, acknowledgements, in-flight recovery, retries, dead-letter storage and operator replay
+- An asynchronous Python scheduler implementation with time-zone-aware jobs, retry and backoff behavior
+- A durable notification outbox with claimed rows, retry controls and encrypted message payloads
+- Idempotency keys for publishing requests and SHA-256 fingerprints for canonical content and source URLs
+
+### Integrations and content processing
+
+- Asynchronous HTTP integrations through HTTPX and aiohttp with request timeouts
+- Provider adapters for OpenAI-compatible endpoints and Gemini, configurable model selection, provider priority and fallback
+- Transient AI error retries with exponential backoff, normalized provider errors, usage records and a mock provider for tests
+- A staged pipeline for research, duplicate and quality checks, verification, writing, media, approval and publication
+- Deterministic advertisement heuristics alongside AI-assisted verification and content generation guardrails
+- Source URL validation that restricts protocols and ports, rejects embedded credentials and private or reserved network targets, and disables redirects in collectors
+- Upload validation using file signatures, declared MIME checks, size limits and sanitized filenames
+- Local and S3-compatible media storage adapters
+
+### Identity, authorization and protection
+
+- Password storage using salted bcrypt with a SHA-256 pre-hash for new passwords and compatibility checks for older hashes
+- Signed, typed JWTs for access, refresh and password-reset flows
+- Telegram Web App identity verification using Telegram HMAC data validation
+- A short-lived Telegram login challenge held in Redis, bound to the approving Telegram user and browser challenge
+- HttpOnly, Secure and SameSite cookies, origin checks and CSRF token validation for browser sessions
+- Role-based access checks and organization-scoped ownership checks on protected resources
+- API rate limits separated by authentication, administrator, payment and general request categories
+- Request body limits, CORS origin controls, security response headers and trusted-proxy IP handling
+- Production startup validation that rejects missing or known-weak critical secrets
+- Versioned application-level OpenSSL AES-256-CBC encryption with PBKDF2 and HMAC authentication for selected bot secrets and notification payloads, with key identifiers and a key-rotation routine
+- Backup encryption using OpenSSL AES-256-CBC with PBKDF2 and a separate HMAC-SHA256 integrity check
+- PostgreSQL and SQLite backup verification, dump checksums and guarded restore workflows
+- Tamper-evident audit records linked into scoped HMAC-SHA256 hash chains, with signed checkpoints and optional S3 Object Lock storage
+- Sensitive-field masking in audit and administrative output
+
+### Operations and engineering checks
+
+- Docker Compose services with persistent data volumes, database health checks, separate schema migration, and bounded container resources
+- Read-only container filesystems, dropped Linux capabilities and no-new-privileges settings on the Python application services
+- JSON structured logs with request IDs for tracing an API action through its logs and audit entries
+- Health and readiness endpoints, service heartbeat files, and Prometheus-format counters and gauges
+- Pytest and pytest-asyncio configuration for unit, integration, end-to-end and external-service tests
+- Ruff linting, strict mypy configuration, branch coverage, Bandit and pip-audit tooling configured in the Python project
+
+The production deployment also lists Go scheduler and worker containers, but only their binaries were available during the source review
+The Python scheduler and queue descriptions above refer to Python implementations found in source and should not be read as a review of those Go binaries
+
 ## Important limits
 
 - Duplicate screening and channel memory code exist, but they do not guarantee that every repeated story will be stopped
